@@ -1,0 +1,12 @@
+process.env.NODE_ENV = 'test';
+process.env.PORT = process.env.PORT || '3001';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/omnilock_test';
+process.env.DB_POOL_MAX = process.env.DB_POOL_MAX || '5';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
+process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test_refresh_secret';
+process.env.JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+process.env.BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS || '10';
+process.env.PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'test_webhook_secret';
+process.env.DEVICE_SHARED_SECRET = process.env.DEVICE_SHARED_SECRET || 'test_device_secret';
+process.env.PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || 'sslcommerz';

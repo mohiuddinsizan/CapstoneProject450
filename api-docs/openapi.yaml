@@ -1,0 +1,609 @@
+openapi: 3.0.3
+info:
+  title: OmniLock Backend API
+  version: 0.1.0
+  description: Software-side API for OmniLock smart locker backend (Node.js + Express + PostgreSQL).
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Health
+  - name: Auth
+  - name: Discovery
+  - name: Bookings
+  - name: Payments
+  - name: OTP
+  - name: Access
+  - name: Device
+  - name: Biometric
+  - name: Admin
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    deviceSecret:
+      type: apiKey
+      in: header
+      name: x-device-secret
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: x-webhook-signature
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+    RegisterBody:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        phone: { type: string }
+    LoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    RefreshBody:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBody'
+      responses:
+        '201': { description: Registered }
+        '400': { description: Validation error }
+        '409': { description: Email exists }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginBody'
+      responses:
+        '200': { description: Login success }
+        '401': { description: Invalid credentials }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshBody'
+      responses:
+        '200': { description: Token refreshed }
+        '401': { description: Invalid refresh token }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: User profile }
+        '401': { description: Unauthorized }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Alternate current user profile endpoint
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: User profile }
+
+  /locations:
+    get:
+      tags: [Discovery]
+      summary: List locations
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Locations list }
+
+  /lockers:
+    get:
+      tags: [Discovery]
+      summary: Search lockers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: locationId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: Lockers list }
+
+  /lockers/{id}:
+    get:
+      tags: [Discovery]
+      summary: Get locker details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Locker details }
+        '404': { description: Locker not found }
+
+  /bookings/quote:
+    post:
+      tags: [Bookings]
+      summary: Get booking quote
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, planId, startAt]
+              properties:
+                lockerId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+                startAt: { type: string, format: date-time }
+      responses:
+        '200': { description: Quote data }
+
+  /bookings:
+    post:
+      tags: [Bookings]
+      summary: Create booking (PENDING)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, planId, startAt]
+              properties:
+                lockerId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+                startAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Booking created }
+    get:
+      tags: [Bookings]
+      summary: List my bookings
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Bookings list }
+
+  /bookings/{id}:
+    get:
+      tags: [Bookings]
+      summary: Get booking details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Booking details }
+        '404': { description: Booking not found }
+
+  /subscriptions/extend:
+    post:
+      tags: [Bookings]
+      summary: Extend active subscription (creates follow-up booking)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId, planId]
+              properties:
+                bookingId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+      responses:
+        '201': { description: Extension booking created }
+
+  /payments/checkout:
+    post:
+      tags: [Payments]
+      summary: Initiate payment checkout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId]
+              properties:
+                bookingId: { type: string, format: uuid }
+      responses:
+        '200': { description: Checkout URL returned }
+
+  /payments/webhook:
+    post:
+      tags: [Payments]
+      summary: Payment provider webhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [providerRef, status]
+              properties:
+                providerRef: { type: string }
+                status:
+                  type: string
+                  enum: [SUCCESS, FAILED, PENDING]
+      responses:
+        '200': { description: Webhook processed }
+        '401': { description: Invalid signature }
+
+  /payments/history:
+    get:
+      tags: [Payments]
+      summary: Payment history for current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Payment history }
+
+  /otp/request:
+    post:
+      tags: [OTP]
+      summary: Request access OTP
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200': { description: OTP challenge created }
+
+  /otp/verify:
+    post:
+      tags: [OTP]
+      summary: Verify access OTP
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, otp]
+              properties:
+                lockerId: { type: string, format: uuid }
+                otp: { type: string, example: '123456' }
+      responses:
+        '200': { description: Unlock token returned }
+
+  /otp/enrollment:
+    post:
+      tags: [OTP]
+      summary: Request enrollment OTP
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200': { description: Enrollment OTP created }
+
+  /otp/verify-enrollment:
+    post:
+      tags: [OTP]
+      summary: Verify enrollment OTP
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, otp]
+              properties:
+                lockerId: { type: string, format: uuid }
+                otp: { type: string, example: '123456' }
+      responses:
+        '200': { description: Enrollment OTP verified }
+
+  /access/decision:
+    post:
+      tags: [Access]
+      summary: Device access decision endpoint
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, userId, nonce]
+              properties:
+                lockerId: { type: string, format: uuid }
+                userId: { type: string, format: uuid }
+                nonce: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Access decision result }
+        '401': { description: Device auth/nonce failure }
+
+  /device/events:
+    post:
+      tags: [Device]
+      summary: Store door event
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, eventType]
+              properties:
+                lockerId: { type: string, format: uuid }
+                eventType:
+                  type: string
+                  enum: [UNLOCKED, OPENED, CLOSED, LOCKED]
+      responses:
+        '201': { description: Event stored }
+
+  /device/telemetry:
+    post:
+      tags: [Device]
+      summary: Store telemetry payload
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, payload]
+              properties:
+                lockerId: { type: string, format: uuid }
+                payload: { type: object }
+      responses:
+        '201': { description: Telemetry stored }
+
+  /biometric/register:
+    post:
+      tags: [Biometric]
+      summary: Register biometric template hash
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, templateHash]
+              properties:
+                lockerId: { type: string, format: uuid }
+                deviceId: { type: string, format: uuid }
+                templateHash: { type: string }
+      responses:
+        '201': { description: Biometric enrollment created }
+
+  /admin/locations:
+    post:
+      tags: [Admin]
+      summary: Create location
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                building: { type: string }
+                floor: { type: string }
+      responses:
+        '201': { description: Location created }
+
+  /admin/lockers:
+    get:
+      tags: [Admin]
+      summary: List all lockers
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Locker list }
+
+  /admin/lockers/{id}:
+    patch:
+      tags: [Admin]
+      summary: Update locker metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lockerName: { type: string }
+                series: { type: string }
+                firmwareVersion: { type: string }
+      responses:
+        '200': { description: Locker updated }
+
+  /admin/lockers/{id}/maintenance:
+    patch:
+      tags: [Admin]
+      summary: Toggle maintenance mode
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [maintenance]
+              properties:
+                maintenance: { type: boolean }
+      responses:
+        '200': { description: Maintenance status updated }
+
+  /admin/unlock:
+    post:
+      tags: [Admin]
+      summary: Emergency unlock
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200': { description: Admin unlock token issued }
+
+  /admin/audit:
+    get:
+      tags: [Admin]
+      summary: Get audit logs
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200': { description: Audit logs }
+
+  /admin/devices:
+    get:
+      tags: [Admin]
+      summary: List registered devices
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Device list }
+
+  /admin/subscription-plans:
+    get:
+      tags: [Admin]
+      summary: List subscription plans
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Plan list }
+    post:
+      tags: [Admin]
+      summary: Create subscription plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, durationMinutes, price]
+              properties:
+                name: { type: string }
+                billingType: { type: string }
+                durationMinutes: { type: integer, minimum: 1 }
+                price: { type: number, minimum: 0 }
+                active: { type: boolean, default: true }
+      responses:
+        '201': { description: Plan created }
