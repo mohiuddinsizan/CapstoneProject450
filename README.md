@@ -10,7 +10,8 @@ The following sequence reflects the implementation flow used during development.
 
 ### Phase A — Workspace and Backend Foundation
 1. Created project folders:
-   - `backend/`, `api-docs/`, `database/`, `frontend-user/`, `frontend-locker/`
+   - `backend/`, `api-docs/`, `database/`, `frontend/`
+   - (Earlier planning used `frontend-user/` and `frontend-locker/`; implementation is now consolidated into `frontend/`.)
 2. Created backend skeleton folders under `backend/src/`:
    - `config/`, `middleware/`, `routes/`, `controllers/`, `services/`, `repositories/`, `jobs/`, `utils/`, `validators/`
 3. Created backend setup files:
@@ -383,3 +384,22 @@ npm test
 - Hardware integration is intentionally out of scope for this stage.
 - MQTT/SMS integrations are software-side ready; real provider wiring can be plugged in next.
 - OpenAPI and Postman reflect currently implemented endpoints.
+
+---
+
+## Frontend (OmniLock UI Integrated)
+
+A new frontend has been added at `frontend/` by reusing the Omnilock UI design pattern and synchronizing with the existing backend APIs.
+
+### Frontend setup
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+The frontend expects backend API at `VITE_API_BASE_URL` (default: `http://localhost:3000`).
+
+Frontend user flow now reads active plans from authenticated `GET /plans`, while admin plan management still uses `/admin/subscription-plans`.

@@ -18,7 +18,7 @@ async function searchLockers({ locationId, status }) {
 
   const result = await query(
     `SELECT l.id, l.location_id, l.locker_name, l.series, l.status, l.firmware_version,
-            loc.name AS location_name, loc.building, loc.floor
+            loc.name AS location_name, loc.building, loc.floor, loc.latitude, loc.longitude
      FROM lockers l
      LEFT JOIN locations loc ON loc.id = l.location_id
      ${whereClause}
@@ -32,7 +32,7 @@ async function searchLockers({ locationId, status }) {
 async function findLockerById(lockerId) {
   const result = await query(
     `SELECT l.id, l.location_id, l.locker_name, l.series, l.status, l.firmware_version, l.created_at,
-            loc.name AS location_name, loc.building, loc.floor
+            loc.name AS location_name, loc.building, loc.floor, loc.latitude, loc.longitude
      FROM lockers l
      LEFT JOIN locations loc ON loc.id = l.location_id
      WHERE l.id = $1`,
@@ -57,7 +57,7 @@ async function updateLockerStatus(lockerId, status) {
 async function listAllLockers() {
   const result = await query(
     `SELECT l.id, l.location_id, l.locker_name, l.series, l.status, l.firmware_version, l.created_at,
-            loc.name AS location_name
+            loc.name AS location_name, loc.latitude, loc.longitude
      FROM lockers l
      LEFT JOIN locations loc ON loc.id = l.location_id
      ORDER BY l.created_at DESC`

@@ -5,6 +5,7 @@ const compression = require('compression');
 const authRoutes = require('./routes/auth.routes');
 const discoveryRoutes = require('./routes/discovery.routes');
 const bookingsRoutes = require('./routes/bookings.routes');
+const planRoutes = require('./routes/plan.routes');
 const paymentsRoutes = require('./routes/payments.routes');
 const otpRoutes = require('./routes/otp.routes');
 const accessRoutes = require('./routes/access.routes');
@@ -29,6 +30,7 @@ function createApp() {
   app.use('/auth', authRoutes);
   app.use(discoveryRoutes);
   app.use(bookingsRoutes);
+  app.use(planRoutes);
   app.use(paymentsRoutes);
   app.use(otpRoutes);
   app.use(accessRoutes);
