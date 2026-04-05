@@ -383,3 +383,64 @@ npm test
 - Hardware integration is intentionally out of scope for this stage.
 - MQTT/SMS integrations are software-side ready; real provider wiring can be plugged in next.
 - OpenAPI and Postman reflect currently implemented endpoints.
+
+## Connect to Supabase PostgreSQL
+
+1. In `backend/.env`, set `DATABASE_URL` to the Supabase **pooler** connection string (IPv4-friendly):
+```dotenv
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres
+```
+If your password contains special characters (e.g. `@`), URL-encode them (e.g. `@` -> `%40`).
+
+2. Test DB connectivity from project root:
+```bash
+DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' backend/.env)"
+psql "$DATABASE_URL" -c "select now();"
+```
+
+3. Run migrations in order from `database/migrations`:
+```bash
+export DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' backend/.env)"
+for f in database/migrations/*.sql; do
+   echo "Applying $f"
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+done
+psql "$DATABASE_URL" -c "\dt"
+```
+
+4. Start backend after migrations:
+```bash
+cd backend
+npm run dev
+```
+
+## Seed Dummy Data (All Tables)
+
+After migrations are applied, run the seed file to insert linked dummy records into all tables.
+
+1. Apply seed SQL:
+```bash
+export DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' backend/.env)"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seeds/001_dummy_data.sql
+```
+
+2. Quick verification:
+```bash
+psql "$DATABASE_URL" -c "select count(*) as users_count from users;"
+psql "$DATABASE_URL" -c "select count(*) as bookings_count from bookings;"
+psql "$DATABASE_URL" -c "select count(*) as telemetry_count from device_telemetry;"
+```
+
+Notes:
+- The seed is idempotent (uses fixed UUIDs + `ON CONFLICT`), so it can be re-run safely.
+- Dummy users are `demo.user@omnilock.local` and `demo.admin@omnilock.local`.
+
+## Share Supabase DB with Teammates
+
+1. Add teammates in Supabase project members (Developer role is enough for app development).
+2. Share `DATABASE_URL` securely (password manager/private channel), never in Git or public chat.
+3. Keep real secrets only in each developer's local `backend/.env`.
+4. Keep `backend/.env.example` with placeholders only.
+5. One teammate runs migrations on the shared DB; others can then run the backend normally.
+6. If credentials are exposed, rotate the DB password in Supabase and update everyone’s `DATABASE_URL`.
+
