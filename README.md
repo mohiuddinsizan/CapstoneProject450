@@ -403,3 +403,28 @@ npm run dev
 The frontend expects backend API at `VITE_API_BASE_URL` (default: `http://localhost:3000`).
 
 Frontend user flow now reads active plans from authenticated `GET /plans`, while admin plan management still uses `/admin/subscription-plans`.
+
+### Frontend work completed (summary)
+
+- Implemented a full React + Vite + TypeScript frontend in `frontend/`.
+- Synced frontend flows with backend modules:
+   - Auth: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/refresh`
+   - Discovery: `/locations`, `/lockers`, `/lockers/:id`
+   - Booking: `/bookings/quote`, `/bookings`, `/bookings/:id`, `/subscriptions/extend`
+   - Payments: `/payments/checkout`, `/payments/history`
+   - OTP/Access/Biometric: `/otp/*`, `/access/decision`, `/biometric/register`
+   - Admin: `/admin/locations`, `/admin/lockers`, `/admin/unlock`, `/admin/audit`, `/admin/devices`, `/admin/subscription-plans`
+- Added interactive map-based locker discovery using Leaflet.
+- Added coordinate support end-to-end (`latitude`, `longitude`) and migration:
+   - `database/migrations/011_add_location_coordinates.sql`
+- Added Omnilock UI kit integration by importing all files from reference `components/ui` into:
+   - `frontend/src/app/components/ui/`
+   - plus aggregate export file `frontend/src/app/components/ui/all.ts`
+- Applied Omnilock-style visual redesign across auth, shell, mobile, tablet, and admin panel sections.
+
+### Local admin credentials (development only)
+
+- Email: `admin@omnilock.com`
+- Password: `Admin@12345`
+
+> Note: These credentials are for local development/testing only. Change/remove before any production deployment.
