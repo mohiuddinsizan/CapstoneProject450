@@ -1,0 +1,1258 @@
+﻿openapi: 3.0.3
+info:
+  title: OmniLock Backend API
+  version: 0.1.0
+  description: |
+    REST API for OmniLock smart locker backend (Node.js + Express + PostgreSQL).
+
+    Conventions:
+    - All error responses are JSON: `{ "message": "..." }`.
+    - Authenticated endpoints require `Authorization: Bearer <accessToken>`.
+    - Device endpoints require `x-device-secret: <DEVICE_SHARED_SECRET>`.
+    - Payment webhook requires `x-webhook-signature` (HMAC-SHA256 hex over raw JSON body).
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Health
+  - name: Auth
+  - name: Discovery
+  - name: Plans
+  - name: Bookings
+  - name: Payments
+  - name: OTP
+  - name: Access
+  - name: Device
+  - name: Biometric
+  - name: Admin
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    deviceSecret:
+      type: apiKey
+      in: header
+      name: x-device-secret
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: x-webhook-signature
+
+  responses:
+    BadRequest:
+      description: Bad request / validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    User:
+      type: object
+      required: [id, name, email, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        role: { type: string, example: user }
+        created_at: { type: string, format: date-time }
+
+    Tokens:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    AuthResponse:
+      type: object
+      required: [user, accessToken, refreshToken]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    Location:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        building: { type: string, nullable: true }
+        floor: { type: string, nullable: true }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+
+    LockerStatus:
+      type: string
+      enum: [AVAILABLE, OCCUPIED, MAINTENANCE, LOCKED_EXPIRED]
+
+    Locker:
+      type: object
+      required: [id, location_id, locker_name, status]
+      properties:
+        id: { type: string, format: uuid }
+        location_id: { type: string, format: uuid, nullable: true }
+        locker_name: { type: string }
+        series: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/LockerStatus' }
+        firmware_version: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        location_name: { type: string, nullable: true }
+        building: { type: string, nullable: true }
+        floor: { type: string, nullable: true }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+
+    SubscriptionPlan:
+      type: object
+      required: [id, name, duration_minutes, price, active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        billing_type: { type: string, nullable: true }
+        duration_minutes: { type: integer, minimum: 1 }
+        price: { type: number, minimum: 0 }
+        active: { type: boolean }
+
+    BookingStatus:
+      type: string
+      enum: [PENDING, ACTIVE, EXPIRED]
+
+    Booking:
+      type: object
+      required: [id, user_id, locker_id, plan_id, total_amount, status, start_at, end_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        plan_id: { type: string, format: uuid }
+        total_amount: { type: number }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        start_at: { type: string, format: date-time, nullable: true }
+        end_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        locker_name: { type: string, nullable: true }
+        locker_status: { type: string, nullable: true }
+        plan_name: { type: string, nullable: true }
+        duration_minutes: { type: integer, nullable: true }
+        price: { type: number, nullable: true }
+
+    BookingQuote:
+      type: object
+      required: [lockerId, planId, startAt, endAt, durationMinutes, totalAmount]
+      properties:
+        lockerId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        durationMinutes: { type: integer, minimum: 1 }
+        totalAmount: { type: number, minimum: 0 }
+
+    PaymentStatus:
+      type: string
+      enum: [PENDING, SUCCESS, FAILED]
+
+    PaymentTransaction:
+      type: object
+      required: [id, booking_id, locker_id, amount, provider, provider_ref, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        booking_id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        amount: { type: number }
+        currency: { type: string, example: BDT }
+        provider: { type: string }
+        provider_ref: { type: string }
+        status: { $ref: '#/components/schemas/PaymentStatus' }
+        created_at: { type: string, format: date-time }
+
+    PaymentCheckoutResponse:
+      type: object
+      required: [payment, redirectUrl]
+      properties:
+        payment: { $ref: '#/components/schemas/PaymentTransaction' }
+        redirectUrl: { type: string, format: uri }
+
+    PaymentWebhookResponse:
+      type: object
+      required: [processed, idempotent]
+      properties:
+        processed: { type: boolean }
+        idempotent: { type: boolean }
+        status: { type: string, nullable: true }
+        booking: { $ref: '#/components/schemas/Booking' }
+
+    OtpChallengeResponse:
+      type: object
+      required: [challengeId, expiresAt]
+      properties:
+        challengeId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+
+    UnlockTokenResponse:
+      type: object
+      required: [unlockToken, expiresIn]
+      properties:
+        unlockToken: { type: string }
+        expiresIn: { type: string, example: 30s }
+
+    AccessDecisionResponse:
+      type: object
+      required: [granted, unlockToken, expiresIn]
+      properties:
+        granted: { type: boolean }
+        unlockToken: { type: string }
+        expiresIn: { type: string, example: 30s }
+
+    DoorEvent:
+      type: object
+      required: [id, locker_id, event_type, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        event_type: { type: string, enum: [UNLOCKED, OPENED, CLOSED, LOCKED] }
+        created_at: { type: string, format: date-time }
+
+    DeviceTelemetry:
+      type: object
+      required: [id, device_id, locker_id, payload, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        payload: { type: object }
+        created_at: { type: string, format: date-time }
+
+    Device:
+      type: object
+      required: [id, locker_id, nonce, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        nonce: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        locker_name: { type: string, nullable: true }
+
+    BiometricEnrollment:
+      type: object
+      required: [id, user_id, locker_id, template_hash, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        locker_id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid, nullable: true }
+        template_hash: { type: string }
+        enrolled_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    AdminUnlockResponse:
+      type: object
+      required: [lockerId, token, expiresIn]
+      properties:
+        lockerId: { type: string, format: uuid }
+        token: { type: string }
+        expiresIn: { type: string, example: 15m }
+
+    AuditLog:
+      type: object
+      required: [id, created_at, log_type, locker_id, outcome]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        log_type: { type: string, enum: [ACCESS_ATTEMPT, DOOR_EVENT] }
+        locker_id: { type: string, format: uuid }
+        outcome: { type: string }
+        method: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 100 }
+                email: { type: string, format: email, maxLength: 150 }
+                password: { type: string, minLength: 8, maxLength: 128 }
+                phone: { type: string, maxLength: 20, nullable: true }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 150 }
+                password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        '200':
+          description: Login success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Get current user (alias)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /locations:
+    get:
+      tags: [Discovery]
+      summary: List locations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Locations list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [locations]
+                properties:
+                  locations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Location' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /lockers:
+    get:
+      tags: [Discovery]
+      summary: Search lockers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: locationId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/LockerStatus' }
+      responses:
+        '200':
+          description: Lockers list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lockers]
+                properties:
+                  lockers:
+                    type: array
+                    items: { $ref: '#/components/schemas/Locker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /lockers/{id}:
+    get:
+      tags: [Discovery]
+      summary: Get locker details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Locker details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [locker]
+                properties:
+                  locker: { $ref: '#/components/schemas/Locker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /plans:
+    get:
+      tags: [Plans]
+      summary: List subscription plans
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plans]
+                properties:
+                  plans:
+                    type: array
+                    items: { $ref: '#/components/schemas/SubscriptionPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /bookings/quote:
+    post:
+      tags: [Bookings]
+      summary: Get booking quote (availability + plan duration/price)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, planId, startAt]
+              properties:
+                lockerId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+                startAt: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Quote data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingQuote' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /bookings:
+    post:
+      tags: [Bookings]
+      summary: Create booking (status=PENDING)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, planId, startAt]
+              properties:
+                lockerId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+                startAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [booking]
+                properties:
+                  booking: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    get:
+      tags: [Bookings]
+      summary: List my bookings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Bookings list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookings]
+                properties:
+                  bookings:
+                    type: array
+                    items: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /bookings/{id}:
+    get:
+      tags: [Bookings]
+      summary: Get booking details (must belong to current user)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [booking]
+                properties:
+                  booking: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /subscriptions/extend:
+    post:
+      tags: [Bookings]
+      summary: Extend active subscription (creates follow-up booking)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId, planId]
+              properties:
+                bookingId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Extension booking created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [booking]
+                properties:
+                  booking: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /payments/checkout:
+    post:
+      tags: [Payments]
+      summary: Initiate payment checkout for a PENDING booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookingId]
+              properties:
+                bookingId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Checkout URL returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentCheckoutResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /payments/webhook:
+    post:
+      tags: [Payments]
+      summary: Payment provider webhook
+      description: |
+        Expects `x-webhook-signature` to be `HMAC_SHA256_HEX(PAYMENT_WEBHOOK_SECRET, rawJsonBody)`.
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [providerRef, status]
+              properties:
+                providerRef: { type: string }
+                status: { type: string, enum: [SUCCESS, FAILED, PENDING] }
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentWebhookResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /payments/history:
+    get:
+      tags: [Payments]
+      summary: Payment history for current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Payment history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payments]
+                properties:
+                  payments:
+                    type: array
+                    items: { $ref: '#/components/schemas/PaymentTransaction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /otp/request:
+    post:
+      tags: [OTP]
+      summary: Request access OTP (requires active access grant)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OTP challenge created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpChallengeResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /otp/verify:
+    post:
+      tags: [OTP]
+      summary: Verify access OTP (returns unlock token)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, otp]
+              properties:
+                lockerId: { type: string, format: uuid }
+                otp: { type: string, pattern: '^\\d{6}$', example: '123456' }
+      responses:
+        '200':
+          description: Unlock token returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnlockTokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /otp/enrollment:
+    post:
+      tags: [OTP]
+      summary: Request enrollment OTP (requires active access grant)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Enrollment OTP created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpChallengeResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /otp/verify-enrollment:
+    post:
+      tags: [OTP]
+      summary: Verify enrollment OTP (returns unlock token)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, otp]
+              properties:
+                lockerId: { type: string, format: uuid }
+                otp: { type: string, pattern: '^\\d{6}$', example: '123456' }
+      responses:
+        '200':
+          description: Unlock token returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnlockTokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /access/decision:
+    post:
+      tags: [Access]
+      summary: Device access decision (biometric path)
+      description: |
+        Used by the locker device after local biometric match.
+        Validates access grant and device nonce, then publishes an unlock token via MQTT.
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, userId, nonce]
+              properties:
+                lockerId: { type: string, format: uuid }
+                userId: { type: string, format: uuid }
+                nonce: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Access decision result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessDecisionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /device/events:
+    post:
+      tags: [Device]
+      summary: Store door event from device
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, eventType]
+              properties:
+                lockerId: { type: string, format: uuid }
+                eventType:
+                  type: string
+                  enum: [UNLOCKED, OPENED, CLOSED, LOCKED]
+      responses:
+        '201':
+          description: Event stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event]
+                properties:
+                  event: { $ref: '#/components/schemas/DoorEvent' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /device/telemetry:
+    post:
+      tags: [Device]
+      summary: Store telemetry payload from device
+      security:
+        - deviceSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, payload]
+              properties:
+                lockerId: { type: string, format: uuid }
+                payload: { type: object }
+      responses:
+        '201':
+          description: Telemetry stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [telemetry]
+                properties:
+                  telemetry: { $ref: '#/components/schemas/DeviceTelemetry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /biometric/register:
+    post:
+      tags: [Biometric]
+      summary: Register biometric template hash for a locker
+      description: Requires an active access grant for the locker.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId, templateHash]
+              properties:
+                lockerId: { type: string, format: uuid }
+                deviceId: { type: string, format: uuid, nullable: true }
+                templateHash: { type: string, minLength: 16 }
+      responses:
+        '201':
+          description: Biometric enrollment created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enrollment]
+                properties:
+                  enrollment: { $ref: '#/components/schemas/BiometricEnrollment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/locations:
+    post:
+      tags: [Admin]
+      summary: Create location (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                building: { type: string, maxLength: 100, nullable: true }
+                floor: { type: string, maxLength: 20, nullable: true }
+                latitude: { type: number, minimum: -90, maximum: 90, nullable: true }
+                longitude: { type: number, minimum: -180, maximum: 180, nullable: true }
+      responses:
+        '201':
+          description: Location created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [location]
+                properties:
+                  location: { $ref: '#/components/schemas/Location' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/lockers:
+    get:
+      tags: [Admin]
+      summary: List all lockers (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Locker list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lockers]
+                properties:
+                  lockers:
+                    type: array
+                    items: { $ref: '#/components/schemas/Locker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/lockers/{id}:
+    patch:
+      tags: [Admin]
+      summary: Update locker metadata (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lockerName: { type: string, maxLength: 50 }
+                series: { type: string, maxLength: 50, nullable: true }
+                firmwareVersion: { type: string, maxLength: 20, nullable: true }
+      responses:
+        '200':
+          description: Locker updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [locker]
+                properties:
+                  locker: { $ref: '#/components/schemas/Locker' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/lockers/{id}/maintenance:
+    patch:
+      tags: [Admin]
+      summary: Toggle locker maintenance (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [maintenance]
+              properties:
+                maintenance: { type: boolean }
+      responses:
+        '200':
+          description: Maintenance status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [locker]
+                properties:
+                  locker: { $ref: '#/components/schemas/Locker' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/unlock:
+    post:
+      tags: [Admin]
+      summary: Emergency unlock (admin)
+      description: |
+        Requires an `admin` role in the bearer token.
+        Returns a short-lived admin unlock token (also published via MQTT).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockerId]
+              properties:
+                lockerId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Admin unlock token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUnlockResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/audit:
+    get:
+      tags: [Admin]
+      summary: Get audit logs (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/devices:
+    get:
+      tags: [Admin]
+      summary: List registered devices (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /admin/subscription-plans:
+    get:
+      tags: [Admin]
+      summary: List subscription plans (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Plan list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plans]
+                properties:
+                  plans:
+                    type: array
+                    items: { $ref: '#/components/schemas/SubscriptionPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Admin]
+      summary: Create subscription plan (admin)
+      description: Requires an `admin` role in the bearer token.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, durationMinutes, price]
+              properties:
+                name: { type: string, maxLength: 100 }
+                billingType: { type: string, maxLength: 30, nullable: true }
+                durationMinutes: { type: integer, minimum: 1 }
+                price: { type: number, minimum: 0 }
+                active: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan]
+                properties:
+                  plan: { $ref: '#/components/schemas/SubscriptionPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
