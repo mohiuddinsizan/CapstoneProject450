@@ -1091,7 +1091,7 @@ export default function OmniLockUserFrontend() {
         ) : null}
       </Modal>
 
-      {/* <Modal
+      { <Modal
         open={accessDialog}
         onClose={() => setAccessDialog(false)}
         title="Locker device authorization"
@@ -1147,7 +1147,7 @@ export default function OmniLockUserFrontend() {
             </div>
           </div>
         </div>
-      </Modal> */}
+      </Modal> }
     </div>
   );
 }
