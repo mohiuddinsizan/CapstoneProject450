@@ -106,7 +106,7 @@ type AuthResponse = {
   refreshToken?: string;
 };
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE;
 const TOKEN_KEY = 'omnilock-access-token';
 const REFRESH_KEY = 'omnilock-refresh-token';
 
