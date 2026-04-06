@@ -106,7 +106,7 @@ type AuthResponse = {
   refreshToken?: string;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE;
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://capstoneproject450.onrender.com';
 const TOKEN_KEY = 'omnilock-access-token';
 const REFRESH_KEY = 'omnilock-refresh-token';
 
