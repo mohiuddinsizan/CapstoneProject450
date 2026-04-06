@@ -35,7 +35,7 @@ type MeResponse = {
   };
 };
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://capstoneproject450.onrender.com';
 const DEMO_OTP = '0000';
 const KIOSK_TOKEN_KEY = 'omnilock-kiosk-token';
 const KIOSK_USER_KEY = 'omnilock-kiosk-user';
