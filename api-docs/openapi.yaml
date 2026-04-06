@@ -160,6 +160,15 @@ paths:
       responses:
         '200': { description: Lockers list }
 
+  /plans:
+    get:
+      tags: [Discovery]
+      summary: List active subscription plans for authenticated users
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Plans list }
+
   /lockers/{id}:
     get:
       tags: [Discovery]

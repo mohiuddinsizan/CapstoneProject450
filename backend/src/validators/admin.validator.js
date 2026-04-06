@@ -3,7 +3,9 @@ const Joi = require('joi');
 const createLocationSchema = Joi.object({
   name: Joi.string().max(100).required(),
   building: Joi.string().max(100).allow('', null),
-  floor: Joi.string().max(20).allow('', null)
+  floor: Joi.string().max(20).allow('', null),
+  latitude: Joi.number().min(-90).max(90).allow(null),
+  longitude: Joi.number().min(-180).max(180).allow(null)
 });
 
 const updateLockerSchema = Joi.object({
